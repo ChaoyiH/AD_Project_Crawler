@@ -60,11 +60,11 @@ def purge_description(description_list):
     description_list = [x for x in description_list if not (x in seen or seen.add(x))]
     return description_list
 
-# --- project_scraper 函数 (未修改) ---
+# --- project_scraper 函数 (已修改) ---
 def project_scraper(project_link: str) -> str:
     """
     Scrapes project details (metadata like architects, area, year, description)
-    and saves them to [project_id]_details.json.
+    and saves them to data/[project_id]/[project_id]_details.json.
     Uses Requests, not Selenium.
 
     Args:
@@ -170,9 +170,13 @@ def project_scraper(project_link: str) -> str:
 
         # --- Save details JSON ---
         details_filename = f'{project_id}_details.json'
-        # Ensure the base directory exists (needed if images aren't downloaded first)
-        Path(project_id).mkdir(parents=True, exist_ok=True)
-        details_filepath = Path(project_id) / details_filename
+        
+        # --- 修改后的代码 (1/2) ---
+        # 确保 data/[project_id] 目录存在
+        base_data_folder = Path(f"data/{project_id}")
+        base_data_folder.mkdir(parents=True, exist_ok=True)
+        details_filepath = base_data_folder / details_filename
+        # --- 修改结束 ---
 
         with open(details_filepath, 'w', encoding='utf-8') as f:
             json.dump(project_dict, f, ensure_ascii=False, indent=2)
@@ -369,11 +373,12 @@ def download_gallery_image(page_url: str, save_directory: Path, base_filename: s
         return success, tags, caption, final_filename
 
 
-# --- process_project_images 函数 (未修改) ---
+# --- process_project_images 函数 (已修改) ---
 def process_project_images(driver: WebDriver, project_url: str) -> Tuple[bool, Optional[Path]]:
     """
     Processes images for a single ArchDaily project using a provided WebDriver:
-    scrapes thumbnails, downloads images, saves image metadata JSON.
+    scrapes thumbnails, downloads images, saves image metadata JSON
+    to the data/[project_id] folder.
 
     Args:
         driver (WebDriver): The shared Selenium WebDriver instance.
@@ -402,7 +407,11 @@ def process_project_images(driver: WebDriver, project_url: str) -> Tuple[bool, O
         print(f"[ERROR] Could not extract project ID for images: {project_url}.")
         return overall_image_success, None
 
-    base_download_folder = Path(project_id)
+    # --- 修改后的代码 (2/2) ---
+    # 将基础文件夹设置为 data/[project_id]
+    base_download_folder = Path(f"data/{project_id}")
+    # --- 修改结束 ---
+    
     print(f"Image Project ID: {project_id}")
     print(f"Image download directory: '{base_download_folder.resolve()}'")
 
@@ -577,7 +586,7 @@ def remove_csv_status(csv_file):
              os.remove(temp_file)
 
 
-# --- 主执行逻辑 (已修改) ---
+# --- 主执行逻辑 (未修改) ---
 if __name__ == "__main__":
     
     # --- 新增代码 ---
@@ -596,7 +605,7 @@ if __name__ == "__main__":
         print("Will process only one item and will not update CSV status.")
     # --- 新增代码结束 ---
 
-    csv_file = './archdaily_projects.csv'
+    csv_file = './archdaily_projects.csv' # --- 这个路径保持不变 ---
     base_url = 'https://www.archdaily.com' # Define base_url needed for link construction
 
     # --- Initialize Shared WebDriver ---
