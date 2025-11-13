@@ -4,6 +4,7 @@ import requests
 import time
 import re
 import json
+import random
 from urllib.parse import urlparse, unquote, urljoin
 from pathlib import Path
 from bs4 import BeautifulSoup
@@ -31,6 +32,18 @@ logging.getLogger("selenium").setLevel(logging.WARNING)
 logging.getLogger("webdriver_manager").setLevel(logging.WARNING)
 
 # --- 辅助函数 (project_scraper) ---
+def parse_cookie_string(cookie_str):
+    """Helper to parse raw cookie string into Selenium dict format"""
+    cookies = []
+    if not cookie_str:
+        return cookies
+    for item in cookie_str.split(';'):
+        if '=' in item:
+            name, value = item.strip().split('=', 1)
+            cookies.append({'name': name, 'value': value})
+    return cookies
+
+
 def extract_text_with_spacing(element):
     """Recursively extracts text preserving approximate spacing."""
     result = ""
@@ -51,6 +64,7 @@ def purge_description(description_list):
     description_list = [x for x in description_list if len(x.split()) > 3]
     # Remove specific boilerplate text
     description_list = [x for x in description_list if "You'll now receive updates based on what you follow!" not in x]
+    description_list = [x for x in description_list if "If you want to make the best of your experience on our site, sign-up." not in x]
     # Remove "Check the" items
     description_list = [x for x in description_list if not x.startswith("Check the")]
     # Remove "Save this picture!" items
@@ -61,35 +75,35 @@ def purge_description(description_list):
     return description_list
 
 # --- project_scraper 函数 (已修改) ---
-def project_scraper(project_link: str) -> str:
+
+# --- project_scraper 函数 (极速版: 依赖Cookie, 去除随机等待) ---
+def project_scraper(project_link: str, driver: WebDriver) -> str:
     """
-    Scrapes project details (metadata like architects, area, year, description)
-    and saves them to data/[project_id]/[project_id]_details.json.
-    Uses Requests, not Selenium.
-
-    Args:
-        project_link (str): The URL of the ArchDaily project page.
-
-    Returns:
-        str: Status ("downloaded" on success, "error" on failure).
+    Scrapes project details using Selenium.
+    Assumes valid Cookies are injected via the main driver, so no anti-bot delays are needed.
     """
     print(f"--- Scraping Project Details for: {project_link} ---")
-    headers = { # Add headers for requests
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
-    }
+    
     try:
-        response = requests.get(project_link, headers=headers, timeout=20)
-        response.raise_for_status() # Check for HTTP errors
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR] Network error fetching details for {project_link}: {e}")
-        return "error"
+        # 1. 直接访问页面 (无随机延时)
+        driver.get(project_link)
 
-    try:
-        soup = BeautifulSoup(response.content, 'html.parser')
+        # 2. 等待页面加载 (仅保留10s等待逻辑)
+        # 有了Cookie，服务器通常会立刻响应，这里是为了防止网络波动
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "div.the-content"))
+            )
+        except TimeoutException:
+            print("[WARN] Timeout waiting for 'the-content' (10s). Proceeding with available HTML.")
+
+        # 3. 获取 HTML
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
         print('Project details HTML parsed.')
 
-        # Extract project ID from link for saving
+        # --- 以下数据提取逻辑保持不变 ---
+        
+        # Extract project ID
         project_id = None
         try:
             path_parts = [part for part in urlparse(project_link).path.strip('/').split('/') if part]
@@ -97,20 +111,15 @@ def project_scraper(project_link: str) -> str:
                 if part.isdigit():
                     project_id = part
                     break
-        except Exception:
-            pass # Ignore if ID extraction fails here, use fallback
+        except Exception: pass 
 
         if not project_id:
-             # Fallback: Try getting ID differently or use a placeholder
              project_id_match = re.search(r'/(\d+)/', project_link)
-             if project_id_match:
-                 project_id = project_id_match.group(1)
-             else:
-                 print("[WARN] Could not determine project ID for filename.")
-                 project_id = "unknown_project" # Placeholder ID
+             project_id = project_id_match.group(1) if project_id_match else "unknown_project"
 
-        # --- Data Extraction Logic (similar to original) ---
+        # Metadata Extraction
         data = {'categories': [], 'city': None, 'country': None, 'architects': [], 'area': None, 'year': None, 'description': None}
+        
         title_tag = soup.find(class_='afd-title-big--bmargin-big')
         project_title = title_tag.get_text(strip=True).split('/')[0].strip() if title_tag else "Untitled Project"
 
@@ -132,26 +141,31 @@ def project_scraper(project_link: str) -> str:
             if 'Architects' in key_text: data['architects'] = [a.text.strip() for a in value_tag.find_all('a')]
             elif 'Area' in key_text: data['area'] = value_tag.text.replace('m²', '').strip()
             elif 'Year' in key_text: data['year'] = value_tag.text.strip()
-            # Add more fields here if needed (e.g., Manufacturers, etc.)
 
-        # Description extraction
+        # --- Description Extraction ---
         description_paragraphs = []
-        desc_section = soup.find('div', class_='the-content') # Target the main content div
+        desc_section = soup.find('div', class_='the-content')
+        
+        # 优先尝试从 the-content 提取
         if desc_section:
-            for paragraph in desc_section.find_all('p', recursive=False): # Find direct children paragraphs
-                extracted_text = extract_text_with_spacing(paragraph)
-                normalized_text = re.sub(r'\s+', ' ', extracted_text).strip()
-                if normalized_text: # Avoid empty strings
-                     description_paragraphs.append(normalized_text)
-        else: # Fallback if specific content div isn't found
+            raw_text = desc_section.get_text(separator='\n')
+            lines = raw_text.split('\n')
+            for line in lines:
+                normalized_text = re.sub(r'\s+', ' ', line).strip()
+                if len(normalized_text) > 10: 
+                    description_paragraphs.append(normalized_text)
+        
+        # Fallback
+        if not description_paragraphs:
+             # print("[INFO] Fallback: Trying global p tags.") # 可选：如果不需要太啰嗦的日志可以注释掉
              for paragraph in soup.find_all('p'):
                  extracted_text = extract_text_with_spacing(paragraph)
                  normalized_text = re.sub(r'\s+', ' ', extracted_text).strip()
-                 if normalized_text:
+                 if len(normalized_text) > 10:
                      description_paragraphs.append(normalized_text)
 
-        data['description'] = purge_description(description_paragraphs) # Clean the description list
-        # --- End Data Extraction ---
+        # 清洗描述
+        data['description'] = purge_description(description_paragraphs)
 
         # Construct final dict
         project_dict = {
@@ -166,23 +180,19 @@ def project_scraper(project_link: str) -> str:
             'Project URL': project_link,
             'Description': data['description'] or None
         }
-        project_dict = {k: v for k, v in project_dict.items() if v} # Remove keys with None/empty values
+        project_dict = {k: v for k, v in project_dict.items() if v}
 
-        # --- Save details JSON ---
+        # Save
         details_filename = f'{project_id}_details.json'
-        
-        # --- 修改后的代码 (1/2) ---
-        # 确保 data/[project_id] 目录存在
         base_data_folder = Path(f"data/{project_id}")
         base_data_folder.mkdir(parents=True, exist_ok=True)
         details_filepath = base_data_folder / details_filename
-        # --- 修改结束 ---
 
         with open(details_filepath, 'w', encoding='utf-8') as f:
             json.dump(project_dict, f, ensure_ascii=False, indent=2)
 
         print(f'Project details saved to: {details_filepath}')
-        return "downloaded" # Use status consistent with original script
+        return "downloaded"
 
     except Exception as e:
         print(f"[ERROR] Error processing details for {project_link}: {e}")
@@ -543,7 +553,6 @@ def update_csv_status(csv_file, project_code, status):
              os.remove(temp_file) # Clean up temp file on error
 
 
-# --- remove_csv_status 函数 (未修改) ---
 def remove_csv_status(csv_file):
     # remove all the status in the csv file
     rows = []
@@ -597,23 +606,41 @@ if __name__ == "__main__":
         action='store_true',
         help="Run in debug mode: process only the first non-skipped item and do not update CSV status."
     )
+    parser.add_argument(
+        '-t', '--text-only',
+        action='store_true',
+        help="Only scrape text details, skip image downloading. Allows re-processing 'downloaded' items."
+    )
     args = parser.parse_args()
     debug_mode = args.debug
+    text_only_mode = args.text_only
 
     if debug_mode:
         print("--- RUNNING IN DEBUG MODE ---")
         print("Will process only one item and will not update CSV status.")
+    if text_only_mode:
+        print("--- RUNNING IN TEXT-ONLY MODE ---")
+        print("Will skip image downloading and only scrape text details.")
     # --- 新增代码结束 ---
 
     csv_file = './archdaily_projects.csv' # --- 这个路径保持不变 ---
     base_url = 'https://www.archdaily.com' # Define base_url needed for link construction
 
+    MY_COOKIE_STR = """LANG=en_US; _ga=GA1.2.887640547.1738334817; __io=7bf2e96a2.9ddc57aad_1738334870114; _hjSessionUser_270045=eyJpZCI6IjY0MGMyNzQxLWYyN2EtNTI2Yi1iMTc0LTEyZWE2Zjk3NWEyZiIsImNyZWF0ZWQiOjE3MzgzMzQ4MTc1MDUsImV4aXN0aW5nIjp0cnVlfQ==; _pcid=%7B%22browserId%22%3A%22m6kvpazbdgrok62b%22%7D; cX_P=m6kvpazbdgrok62b; cX_G=cx%3A3nlewowj7kqap38inmj3ksfmyy%3A2pr9vclj2kr3; __pat=3600000; __pnahc=0; _sharedID=50c02da5-e751-4d07-8511-0fc61e7b5c4c; _fbp=fb.1.1762700354708.664573266415830537; mm-user-id=ZfLNgsHlccKey3qn; pushalert_6772_1_pv=1; _gid=GA1.2.279841104.1763045737; __io_unique_25768=13; __io_unique_34360=13; ccuid=71fe9a4a-9e93-4e62-adbd-0f32c7d41594; ccsid=9a1917a5-721f-4e61-aa65-6ed95b68a0fb; _lr_sampling_rate=0; __io_first_source=buy-eu.piano.io; ad-consented_at=2030-11-12T14:58:08.355Z; _pc_payment_details=null; ad_session=94872b597205a714944794919c08b37882ffee91fee6de7fc39dabc633a3eedb; ad_acui=32118956; __io_r=accounts.google.com; __io_pr_utm_campaign=%7B%22referrerHostname%22%3A%22accounts.google.com%22%7D; __tae=1763046618162; _ga_545645PXL7=GS2.2.s1763045738$o3$g1$t1763047203$j60$l0$h0; __pvi=eyJpZCI6InYtbWh4a3M5OTF3dWw4dHVsdCIsImRvbWFpbiI6Ii5hcmNoZGFpbHkuY29tIiwidGltZSI6MTc2MzA0NzIwNDMwOX0%3D; g_state={"i_l":0,"i_ll":1763047204885,"i_b":"AD2qDIIp23l1zkKxs0XFPRsnGTgouIZRbyvTC4kMVSk"}; __tbc=%7Bkpex%7DHyzPJrqRQ5QmyCzRJw_a1mmjaE2egHY-KDNjn_y0swsc5HtwVSHrqbPz3TmHEP0C; _pctx=%7Bu%7DN4IgrgzgpgThIC5QFYAMB2ZAWdBGRoADjFAGYCWAHoiADYDuAjiADQgAuAnoVDQGoANEAF9hbSLADK7AIbtINABYyIAQQDG7cgDcoG9VAjw2EcuygBJACY1kADmQA2XAE50qOy4DMAJhdY7VFwfZBEgA; xbc=%7Bkpex%7DkhspAy1qqDOc5qs1xs9gSH6mQrFobcR0SWszrTn0tBs2kVviQvlozzxhuBg41vJQ0uB_8_lDeLt-KoikvesuBtgi8n_du50jbUOC8QUH1-wQwb9MmaeoRfwjYj-DWSuY5IInM0l3890P84TQUx9kI0KCLmzjBeAcs8Ar8TUg5GKD13vxd-t77NQoE1OxQWIgp9G571ExO_TTBTI10VPQQI6urBj4IvTTs5e3gALpRqizCa4mBFuYeLFxAwZY9LDAxFy9lcVj9sGZcEFt8Zh9cT4QUgsVe161XWNFkoYYoZyseVX2ryAl3Uf6d7A5qDwVUvKB4bRyiKOaMv_XmjJcVuqQBqxm1kVqHMkYXdv9Dc9OQFKl4PJnRkPOvVx2SGOyFP7GLBDiEV7wea4pUOtts65pUd4LDVWnGMS145qnk-2EgEvg_o8zNnb2mf7TRST8LgUn1CymliAT2318eebmT2N81XfOnVN4l-PzGo11tOeYBsbWW-MLSdSC9B9h0CHb3dj34ernarTQNw9Vs29h39BGXeK6NeW04C6iympI6Q6vkxXIepYZAeGG4_DRO5SM8dsI_5ok_-EvCJYe7lCz9jGNkY1SUCKTqALUmvJQEVRqItFauGqNZz1xHEqfC2Vth9sHpbiayxPuOSUVq0POXzIvdndEQbFYvVH7LGatZqEGQk9_aBqdQ1aep6U16EkG; _sharedID_cst=niwbLLosaQ%3D%3D; __io_lv=1763047666248"""
     # --- Initialize Shared WebDriver ---
     driver = None
     try:
         print("Initializing Shared WebDriver for the session...")
         options = Options()
-        options.add_argument('--headless')
+        # options.add_argument('--headless')
+        # --- [新增] 关键伪装设置 ---
+        # 1. 禁用 "自动化控制" 特征
+        options.add_argument("--disable-blink-features=AutomationControlled") 
+        # 2. 伪装 User-Agent (确保和真实浏览器一致)
+        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
+        # 3. 窗口大小设置 (Headless模式下有时候默认窗口太小触发移动端布局)
+        options.add_argument("--window-size=1920,1080")
+        # -------------------------
         options.add_argument('--disable-gpu')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
@@ -626,6 +653,31 @@ if __name__ == "__main__":
         driver = webdriver.Chrome(service=service, options=options)
         print("Shared WebDriver Initialized.")
 
+        # [关键修改 2] 注入 Cookie
+        print("Injecting Cookies...")
+        try:
+            # 1. 必须先访问一下目标域名，才能设置 Cookie
+            driver.get("https://www.archdaily.com/404") # 访问一个不存在的页面或者主页都行，只要是同域名
+            
+            # 2. 解析并添加 Cookie
+            cookie_list = parse_cookie_string(MY_COOKIE_STR)
+            for cookie in cookie_list:
+                try:
+                    driver.add_cookie(cookie)
+                except Exception as e:
+                    # 有些特定字段可能会报错，忽略即可
+                    pass
+            
+            print(f"Successfully injected {len(cookie_list)} cookies.")
+            
+            # 3. 刷新页面让 Cookie 生效 (或者直接开始后面的任务)
+            driver.refresh()
+            time.sleep(2)
+            
+        except Exception as e:
+            print(f"[WARN] Failed to inject cookies: {e}")
+        
+        print("Shared WebDriver Initialized.")
         # --- Optional: Reset all statuses before starting ---
         # print(f"\nClearing previous statuses in {csv_file}...")
         # remove_csv_status(csv_file)
@@ -675,7 +727,10 @@ if __name__ == "__main__":
             print(f"\n{'='*10} Processing Project {i+1}/{len(rows)}: {project_code} {'='*10}")
 
             # Skip based on status
-            skip_statuses = ['downloaded', 'error', 'incomplete', 'duplicate', 'delete'] # Add more if needed
+            skip_statuses = ['error', 'incomplete', 'duplicate', 'delete'] # Add more if needed
+            if not text_only_mode:
+                skip_statuses.append('downloaded')
+
             if status.lower() in skip_statuses:
                 print(f"Skipping project {project_code} (Status: '{status}').")
                 continue
@@ -686,13 +741,20 @@ if __name__ == "__main__":
             print(f"Project URL: {project_link}")
 
             # --- Step 1: Scrape Project Details ---
-            scraper_status = project_scraper(project_link) # Uses Requests
+            scraper_status = project_scraper(project_link,driver) # Uses Requests
 
             # --- Step 2: Process Project Images (if details scraped successfully) ---
             downloader_overall_success = False
             if scraper_status == "downloaded":
-                # Pass the shared driver here
-                downloader_overall_success, _ = process_project_images(driver, project_link)
+                # --- 修改后的逻辑: 检查是否是 text-only 模式 ---
+                if text_only_mode:
+                    print("Text-only mode enabled: Skipping image download process.")
+                    # 假定下载成功，以免将状态改为 incomplete。
+                    # 如果原本是 downloaded，这样可以保持状态不变（如果后续更新CSV开启的话）。
+                    downloader_overall_success = True 
+                else:
+                    # Pass the shared driver here
+                    downloader_overall_success, _ = process_project_images(driver, project_link)
             else:
                 print("Skipping image download because project details scraping failed.")
 
