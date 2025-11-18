@@ -1,5 +1,7 @@
 import os
 import json
+import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import google.generativeai as genai
 
 
@@ -18,10 +20,8 @@ if not api_key:
 
 genai.configure(api_key=api_key)
 
-# 定义文件路径
-base_dir = "data/902420"
-input_file = os.path.join(base_dir, "902420_details.json")
-output_file = os.path.join(base_dir, "902420.json")
+# 根数据目录（遍历该目录下的所有子文件夹）
+DATA_ROOT = "data"
 
 def extract_info_with_gemini(description_text):
     """
@@ -53,56 +53,94 @@ def extract_info_with_gemini(description_text):
 
     try:
         response = model.generate_content(prompt)
-        result_text = response.text
-        
+        result_text = response.text or "{}"
+
         # 清理可能存在的 Markdown 标记
         if result_text.startswith("```json"):
             result_text = result_text.replace("```json", "").replace("```", "")
         elif result_text.startswith("```"):
             result_text = result_text.replace("```", "")
-            
-        return json.loads(result_text.strip())
+
+        result_text = result_text.strip()
+        # 确保是可解析的 JSON
+        return json.loads(result_text if result_text else "{}")
     except Exception as e:
         print(f"调用 API 或解析 JSON 时出错: {e}")
+        traceback.print_exc()
         return {}
 
+
+def process_project_dir(project_dir):
+    """
+    处理单个项目目录：读取 `<folder>_details.json`，调用提取，生成 `<folder>.json`。
+    """
+    try:
+        folder_name = os.path.basename(os.path.normpath(project_dir))
+        input_file = os.path.join(project_dir, f"{folder_name}_details.json")
+        output_file = os.path.join(project_dir, f"{folder_name}.json")
+
+        if not os.path.exists(input_file):
+            return f"跳过：缺少文件 {input_file}"
+
+        with open(input_file, 'r', encoding='utf-8') as f:
+            original_data = json.load(f)
+
+        # 准备 Description 文本 (原本可能是列表)
+        description_list = original_data.get("Description", [])
+        if isinstance(description_list, list):
+            description_str = "\n".join([str(x) for x in description_list])
+        else:
+            description_str = str(description_list)
+
+        extracted_data = extract_info_with_gemini(description_str)
+
+        if not extracted_data:
+            return f"失败：未能提取数据 {folder_name}"
+
+        # 合并数据
+        original_data.update(extracted_data)
+
+        # 保存
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(original_data, f, ensure_ascii=False, indent=2)
+
+        return f"完成：{folder_name} -> {output_file}"
+    except Exception as e:
+        traceback.print_exc()
+        return f"错误：处理 {project_dir} 时出错：{e}"
+
 def main():
-    # 2. 读取原始 JSON 文件
-    if not os.path.exists(input_file):
-        print(f"找不到文件: {input_file}")
+    if not os.path.isdir(DATA_ROOT):
+        print(f"未找到数据目录：{DATA_ROOT}")
         return
 
-    with open(input_file, 'r', encoding='utf-8') as f:
-        original_data = json.load(f)
+    # 收集所有一级子目录
+    project_dirs = [
+        entry.path
+        for entry in os.scandir(DATA_ROOT)
+        if entry.is_dir()
+    ]
 
-    print(f"正在处理项目: {original_data.get('Project Title', 'Unknown')}")
-
-    # 准备 Description 文本 (原本是列表，转为字符串)
-    description_list = original_data.get("Description", [])
-    description_str = "\n".join(description_list) if isinstance(description_list, list) else str(description_list)
-    print(description_str)
-    # 3. 调用 AI 提取信息
-    extracted_data = extract_info_with_gemini(description_str)
-
-    if not extracted_data:
-        print("未能提取到数据，终止操作。")
+    if not project_dirs:
+        print("未找到任何项目子文件夹。")
         return
 
-    # 4. 合并数据 (原始数据 + 提取的数据)
-    # 使用 update 方法，保留原始键值，添加新键值
-    original_data.update(extracted_data)
+    print(f"发现 {len(project_dirs)} 个项目，将使用 5 线程处理……")
 
-    # 5. 保存到新文件
-    # 确保输出目录存在
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    results = []
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_dir = {executor.submit(process_project_dir, d): d for d in project_dirs}
+        for future in as_completed(future_to_dir):
+            msg = future.result()
+            results.append(msg)
+            print(msg)
 
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(original_data, f, ensure_ascii=False, indent=2)
-
-    print(f"处理完成！文件已保存至: {output_file}")
-    print("提取的键值示例:")
-    for key in extracted_data.keys():
-        print(f"- {key}")
+    # 汇总
+    success = sum(1 for r in results if r.startswith("完成："))
+    skipped = sum(1 for r in results if r.startswith("跳过："))
+    failed = sum(1 for r in results if r.startswith("失败：") or r.startswith("错误："))
+    print("——— 汇总 ———")
+    print(f"成功：{success}，跳过：{skipped}，失败：{failed}")
 
 if __name__ == "__main__":
     main()
