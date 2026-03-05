@@ -1,0 +1,51 @@
+index,chinese_name,name,city,country,level,status
+1,史密森尼国家航空航天博物馆,"Smithsonian National Air and Space Museum, Washington D.C.",华盛顿特区,美国,全球最著名的航空航天馆,1
+2,芝加哥科学与工业博物馆,"Griffin Museum of Science and Industry, Chicago",芝加哥,美国,西半球最大的科学博物馆,1
+3,旧金山探索馆,"Exploratorium, San Francisco",旧金山,美国,互动式科学中心的鼻祖,1
+4,波士顿科学博物馆,"Museum of Science, Boston", Boston,波士顿,美国,1
+5,加州科学中心,"California Science Center, Los Angeles",洛杉矶,美国,收藏有“奋进号”航天飞机,1
+6,德意志博物馆,"Deutsches Museum, Munich",慕尼黑,德国,世界上最大的科技博物馆之一,1
+7,伦敦科学博物馆,"Science Museum, London", London,伦敦,英国,1
+8,巴黎科学工业城,"Cité des Sciences et de l'Industrie, Paris",巴黎,法国,欧洲最大的科学博物馆,1
+9,日本科学未来馆,"Miraikan, Tokyo",东京,日本,本田Asimo机器人/地球显示屏,1
+10,新加坡科学中心,"Science Centre Singapore, Singapore",新加坡,新加坡,亚洲顶级的科普场馆,1
+11,肯尼迪航天中心游客中心,"Kennedy Space Center Visitor Complex, Merritt Island",梅里特岛,美国,NASA发射基地/土星五号,1
+12,美国自然历史博物馆(海登天文馆),"American Museum of Natural History (Rose Center), New York",纽约,美国,虽然是自然馆但天文学极强,1
+13,富兰克林研究所,"The Franklin Institute, Philadelphia",费城,美国,本杰明·富兰克林纪念馆,1
+14,安大略科学中心,"Ontario Science Centre, Toronto",多伦多,加拿大,著名老牌馆(近期有维修争议但地位极高),1
+15,温哥华科学世界,"Science World, Vancouver",温哥华,加拿大,标志性的球体建筑,1
+16,墨尔本博物馆(科学馆),"Scienceworks, Melbourne",墨尔本,澳大利亚,南半球代表性场馆,1
+17,澳大利亚国家科技馆,"Questacon, Canberra",堪培拉,澳大利亚,国家级互动中心,1
+18,尼莫科学博物馆,"NEMO Science Museum, Amsterdam",阿姆斯特丹,荷兰,由伦佐·皮亚诺设计的船型建筑,1
+19,瓦伦西亚艺术科学城(菲利普王子科学馆),"Museu de les Ciències Príncipe Felipe, Valencia",瓦伦西亚,西班牙,卡拉特拉瓦设计的地标建筑,1
+20,巴塞罗那宇宙盒科技馆,"CosmoCaixa, Barcelona",巴塞罗那,西班牙,拥有亚马逊雨林生态缸,1
+21,达芬奇国家科学技术博物馆,"Museo Nazionale Scienza e Tecnologia Leonardo da Vinci, Milan",米兰,意大利,收藏达芬奇机械模型,1
+22,瑞士交通博物馆,"Swiss Museum of Transport, Lucerne",卢塞恩,瑞士,海陆空交通大全,1
+23,欧洲核子研究中心科学门户,"CERN Science Gateway, Geneva",日内瓦,瑞士,2023年新开/粒子物理圣地,1
+24,沃尔夫斯堡菲诺科学中心,"Phaeno Science Center, Wolfsburg",沃尔夫斯堡,德国,扎哈·哈迪德设计的建筑奇观,1
+25,辛斯海姆汽车与技术博物馆,"Technik Museum Sinsheim, Sinsheim",辛斯海姆,德国,同时拥有协和与Tu-144,1
+26,不莱梅宇宙科学中心,"Universum Bremen, Bremen",不莱梅,德国,贝壳/鲸鱼造型建筑,1
+27,哥白尼科学中心,"Copernicus Science Centre, Warsaw",华沙,波兰,东欧最现代化的科技馆,1
+28,尤里卡科学中心,"Heureka, Vantaa",万塔,芬兰,北欧代表性场馆,1
+29,实验馆,"Experimentarium, Copenhagen",哥本哈根,丹麦,以螺旋楼梯著称,1
+30,瑞典国家科学技术博物馆,"Tekniska museet, Stockholm",斯德哥尔摩,瑞典,创新与技术史,1
+31,国立科学博物馆,"National Museum of Nature and Science, Tokyo",东京,日本,上野公园内/综合性强,1
+32,国立中央科学馆,"National Science Museum, Daejeon",大田,韩国,韩国最大的综合科技馆,1
+33,国立果川科学馆,"Gwacheon National Science Museum, Gwacheon",果川,韩国,也是韩国主要大馆,1
+34,科学城,"Science City, Kolkata", Kolkata,加尔各答,印度,1
+35,泰国国家科学馆,"National Science Museum, Pathum Thani", Pathum Thani,巴吞他尼,泰国,1
+36,石油双塔科学探索中心,"Petrosains, The Discovery Centre, Kuala Lumpur", The Discovery Centre,吉隆坡,马来西亚,1
+37,未来博物馆,"Museum of the Future, Dubai",迪拜,阿联酋,展示2071年的科技/建筑奇迹,1
+38,以色列国家科学技术及太空博物馆,"Madatech, Haifa",海法,以色列,诺贝尔奖得主众多,1
+39,圣保罗风向标科学博物馆,"Catavento Cultural e Educacional, Sao Paulo",圣保罗,巴西,南美著名互动馆,1
+40,米拉多尔互动博物馆,"Museo Interactivo Mirador, Santiago",圣地亚哥,智利,南美最大的同类博物馆之一,1
+41,太平洋科学中心,"Pacific Science Center, Seattle",西雅图,美国,世博会遗址/拱门建筑,1
+42,俄勒冈科学与工业博物馆,"OMSI (Oregon Museum of Science and Industry), Portland",波特兰,美国,拥有一艘真实潜艇,1
+43,休斯顿自然科学博物馆,"Houston Museum of Natural Science, Houston",休斯顿,美国,能源大厅非常著名,1
+44,自由科学中心,"Liberty Science Center, Jersey City",泽西城,美国,毗邻纽约/拥有巨型球幕,1
+45,无畏号海空暨太空博物馆,"Intrepid Museum, New York", Air & Space Museum,纽约,美国,1
+46,亨利·福特博物馆,"The Henry Ford, Dearborn",底特律,美国,工业与创新历史,1
+47,格拉斯哥科学中心,"Glasgow Science Centre, Glasgow",格拉斯哥,英国,苏格兰最大,1
+48,国家航天中心,"National Space Centre, Leicester",莱斯特,英国,英国航天科普中心,1
+49,发现宫,"Palais de la Découverte, Paris",巴黎,法国,历史悠久的科学演示馆,1
+50,蒙特利尔科学中心,"Montreal Science Centre, Montreal",蒙特利尔,加拿大,位于老港,1
